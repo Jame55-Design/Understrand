@@ -13,6 +13,7 @@
   var LOGO_BASE = 'https://cdn.jsdelivr.net/gh/Jame55-Design/Understrand@345045853cd96b34279bb624efbf0bfa7b1723ff/logo/';
   var IS_SAFARI = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
   var LOGO_SRC = LOGO_BASE + (IS_SAFARI ? 'understrand-chrome-logo-hevc.mov' : 'understrand-chrome-logo.webm');
+  var VIDEO_BASE = 'https://cdn.jsdelivr.net/gh/Jame55-Design/Understrand@3b86d14557d73e2a93de46681e0f60b8fe80644d/videos/understrand-';
   var XRAY_KEY = 'us-xray';
   var XRAY_SCOPE = '.us-hero,.us-section,.us-videos,.us-footer,.us-logo-fly';
 
@@ -82,6 +83,7 @@
   ready(function () {
     initXray();
     initLogoVideos();
+    initCardVideos();
     initFlickCards();
     initPlayPause();
   });
@@ -134,6 +136,24 @@
       v.src = LOGO_SRC;
       boxes[i].appendChild(v);
       var p = v.play(); if (p && p.catch) p.catch(function () {});
+    }
+  }
+
+  /* ---------- Card videos: <div data-us-video="cam"> becomes a muted looping video ---------- */
+  function initCardVideos() {
+    var boxes = document.querySelectorAll('[data-us-video]');
+    for (var i = 0; i < boxes.length; i++) {
+      if (boxes[i].querySelector('video')) continue;
+      var name = boxes[i].getAttribute('data-us-video');
+      var v = document.createElement('video');
+      v.muted = true; v.loop = true; v.playsInline = true;
+      v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+      v.preload = 'metadata';
+      v.poster = VIDEO_BASE + name + '-poster.jpg';
+      v.src = VIDEO_BASE + name + '.mp4';
+      v.setAttribute('aria-label', name + ' video');
+      v.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none';
+      boxes[i].appendChild(v);
     }
   }
 

@@ -98,13 +98,18 @@
     '@keyframes us-xray-sweep{0%{top:0;opacity:1}90%{top:calc(100vh - 2px);opacity:1}100%{top:calc(100vh - 2px);opacity:0}}',
 
     /* Progressive blur along the top, under the nav */
-    '.progressive-blur{z-index:40;pointer-events:none;isolation:isolate;contain:paint;width:100%;height:8em;position:fixed;top:0;left:0;overflow:hidden;transform:translateZ(0)}',
+    /* Progressive blur along the bottom of the screen; clears the iPhone home bar and hides over the footer */
+    '.progressive-blur{z-index:40;pointer-events:none;isolation:isolate;contain:paint;width:100%;height:calc(7em + env(safe-area-inset-bottom,0px));position:fixed;top:auto;bottom:0;left:0;overflow:hidden;transform:translateZ(0);transition:opacity .4s ease}',
+    '.progressive-blur.is-hidden{opacity:0}',
     '.progressive-blur__layer{position:absolute;inset:0}',
-    '.progressive-blur__layer.is--1{-webkit-backdrop-filter:blur(.09375em);backdrop-filter:blur(.09375em);-webkit-mask:linear-gradient(to top,#0000 50%,#000 62.5% 75%,#0000 87.5%);mask:linear-gradient(to top,#0000 50%,#000 62.5% 75%,#0000 87.5%)}',
-    '.progressive-blur__layer.is--2{-webkit-backdrop-filter:blur(.1875em);backdrop-filter:blur(.1875em);-webkit-mask:linear-gradient(to top,#0000 62.5%,#000 75% 87.5%,#0000 100%);mask:linear-gradient(to top,#0000 62.5%,#000 75% 87.5%,#0000 100%)}',
-    '.progressive-blur__layer.is--3{-webkit-backdrop-filter:blur(.375em);backdrop-filter:blur(.375em);-webkit-mask:linear-gradient(to top,#0000 75%,#000 87.5% 100%);mask:linear-gradient(to top,#0000 75%,#000 87.5% 100%)}',
-    '.progressive-blur__layer.is--4{-webkit-backdrop-filter:blur(.75em);backdrop-filter:blur(.75em);-webkit-mask:linear-gradient(to top,#0000 82%,#000 92% 100%);mask:linear-gradient(to top,#0000 82%,#000 92% 100%)}',
-    '.progressive-blur__layer.is--5{-webkit-backdrop-filter:blur(1.5em);backdrop-filter:blur(1.5em);-webkit-mask:linear-gradient(to top,#0000 88%,#000 100%);mask:linear-gradient(to top,#0000 88%,#000 100%)}',
+    '.progressive-blur__layer.is--1{-webkit-backdrop-filter:blur(.09375em);backdrop-filter:blur(.09375em);-webkit-mask:linear-gradient(#0000 50%,#000 62.5% 75%,#0000 87.5%);mask:linear-gradient(#0000 50%,#000 62.5% 75%,#0000 87.5%)}',
+    '.progressive-blur__layer.is--2{-webkit-backdrop-filter:blur(.1875em);backdrop-filter:blur(.1875em);-webkit-mask:linear-gradient(#0000 62.5%,#000 75% 87.5%,#0000 100%);mask:linear-gradient(#0000 62.5%,#000 75% 87.5%,#0000 100%)}',
+    '.progressive-blur__layer.is--3{-webkit-backdrop-filter:blur(.375em);backdrop-filter:blur(.375em);-webkit-mask:linear-gradient(#0000 75%,#000 87.5% 100%);mask:linear-gradient(#0000 75%,#000 87.5% 100%)}',
+    '.progressive-blur__layer.is--4{-webkit-backdrop-filter:blur(.75em);backdrop-filter:blur(.75em);-webkit-mask:linear-gradient(#0000 82%,#000 92% 100%);mask:linear-gradient(#0000 82%,#000 92% 100%)}',
+    '.progressive-blur__layer.is--5{-webkit-backdrop-filter:blur(1.5em);backdrop-filter:blur(1.5em);-webkit-mask:linear-gradient(#0000 88%,#000 100%);mask:linear-gradient(#0000 88%,#000 100%)}',
+
+    /* Review slider: keep its card stacking inside the section so cards never slide over the nav */
+    '.overlapping-slider__wrap{position:relative;isolation:isolate;z-index:0}',
 
     /* Flick cards: states set by the script */
     '[data-flick-cards-dragger]{position:absolute;inset:0;z-index:1;pointer-events:auto;touch-action:pan-y}',
@@ -134,7 +139,15 @@
     initFlickCards();
     initOverlapSlider();
     initPlayPause();
+    initBlur();
   });
+
+  /* ---------- Progressive blur: fade out once the footer is on screen ---------- */
+  function initBlur() {
+    var blur = document.querySelector('.progressive-blur'), foot = document.querySelector('.us-footer');
+    if (!blur || !foot || !('IntersectionObserver' in window)) return;
+    new IntersectionObserver(function (e) { blur.classList.toggle('is-hidden', e[0].isIntersecting); }, { threshold: 0 }).observe(foot);
+  }
 
   /* ---------- X-ray toggle ---------- */
   function initXray() {
@@ -352,10 +365,17 @@
         var gap = parseFloat(getComputedStyle(slides[0]).marginRight) || 0;
         slideW = slides[0].offsetWidth;
         spacing = slideW + gap;
-        /* last spot where a whole card still fits; anything beyond stacks on the right */
-        rightLimit = Math.max(0, Math.floor((wrap.offsetWidth - slideW) / spacing) * spacing);
-        /* centre the fully visible cards so the stacks either side are even */
-        offset = Math.max(0, (wrap.offsetWidth - (rightLimit + slideW)) / 2);
+        if (window.matchMedia('(max-width: 767px)').matches) {
+          /* phones: one card and part of the next showing, cards run off to the right as before */
+          rightLimit = Infinity; offset = 0;
+        } else {
+          /* desktop/tablet: up to data-visible (default 3) whole cards, centred, even stacks either side */
+          var maxVis = parseInt(init.getAttribute('data-visible') || '3', 10);
+          var fit = Math.floor((wrap.offsetWidth - slideW) / spacing) + 1;
+          var vis = Math.max(1, Math.min(maxVis, fit));
+          rightLimit = (vis - 1) * spacing;
+          offset = Math.max(0, (wrap.offsetWidth - (rightLimit + slideW)) / 2);
+        }
         maxDrag = spacing * (slides.length - 1);
         dragX = clamp(current * spacing);
         update();

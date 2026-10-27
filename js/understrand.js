@@ -15,6 +15,9 @@
   var LOGO_SRC = LOGO_BASE + (IS_SAFARI ? 'understrand-chrome-logo-hevc.mov' : 'understrand-chrome-logo.webm');
   var VIDEO_BASE = 'https://cdn.jsdelivr.net/gh/Jame55-Design/Understrand@3b86d14557d73e2a93de46681e0f60b8fe80644d/videos/understrand-';
   var XRAY_KEY = 'us-xray';
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var SAVE_DATA = !!(navigator.connection && navigator.connection.saveData);
+  var AUTOPLAY = !REDUCED && !SAVE_DATA;
   var XRAY_SCOPE = '.us-hero,.us-section,.us-videos,.us-reviews,.us-footer,.us-logo-fly';
 
   /* ---------- Styles Webflow's designer can't hold (keyframes, states, masks) ---------- */
@@ -29,12 +32,21 @@
     '.xr.light .g2{color:#fff}',
     '.xr .inv{position:absolute;inset:0;z-index:3;background:#fff;mix-blend-mode:difference;pointer-events:none;transform:scaleY(0);transform-origin:bottom;transition:transform .34s cubic-bezier(.75,0,.2,1)}',
     '.xr .scan{position:absolute;left:0;right:0;top:0;height:2px;z-index:5;background:var(--accent);opacity:0;pointer-events:none}',
-    '.xr:hover .inv,.xr:focus-visible .inv,.xr[aria-pressed="true"] .inv{transform:scaleY(1);transform-origin:top}',
-    '.xr:hover .scan,.xr:focus-visible .scan{animation:xr-scan .34s cubic-bezier(.75,0,.2,1) forwards}',
+    '.xr:focus-visible .inv,.xr[aria-pressed="true"] .inv{transform:scaleY(1);transform-origin:top}',
+    '.xr:focus-visible .scan{animation:xr-scan .34s cubic-bezier(.75,0,.2,1) forwards}',
     '.xr:focus-visible{outline:2px solid var(--accent);outline-offset:4px}',
-    '.xr:hover .g1,.xr:focus-visible .g1{animation:xr-g1 2.8s steps(1,end) .12s infinite}',
-    '.xr:hover .g2,.xr:focus-visible .g2{animation:xr-g2 2.8s steps(1,end) .12s infinite}',
-    '.xr:hover .lbl,.xr:focus-visible .lbl{animation:xr-jit 2.8s steps(1,end) .12s infinite}',
+    '.xr:focus-visible .g1{animation:xr-g1 2.8s steps(1,end) .12s infinite}',
+    '.xr:focus-visible .g2{animation:xr-g2 2.8s steps(1,end) .12s infinite}',
+    '.xr:focus-visible .lbl{animation:xr-jit 2.8s steps(1,end) .12s infinite}',
+    /* Hover effects only where there is a real pointer, so taps on phones don't leave buttons stuck mid-effect */
+    '@media (hover:hover) and (pointer:fine){.xr:hover .inv{transform:scaleY(1);transform-origin:top}.xr:hover .scan{animation:xr-scan .34s cubic-bezier(.75,0,.2,1) forwards}.xr:hover .g1{animation:xr-g1 2.8s steps(1,end) .12s infinite}.xr:hover .g2{animation:xr-g2 2.8s steps(1,end) .12s infinite}.xr:hover .lbl{animation:xr-jit 2.8s steps(1,end) .12s infinite}}',
+    /* Tap feedback on touch screens */
+    '@media (hover:none){.xr:active .inv{transform:scaleY(1);transition-duration:.12s}}',
+    '.xr,[data-us-xray-toggle]{touch-action:manipulation}',
+    /* Hero fills the visible screen on phones without jumping as the address bar hides */
+    '.us-hero{min-height:100vh;min-height:100svh}',
+    /* Card video tap-to-play hint */
+    '.flick-card__video{cursor:pointer}',
     '@keyframes xr-scan{0%{opacity:1;top:0}88%{opacity:1;top:calc(100% - 2px)}100%{opacity:0;top:calc(100% - 2px)}}',
     '@keyframes xr-g1{0%{opacity:1;clip-path:inset(12% 0 66% 0);transform:translateX(-7px)}3%{opacity:1;clip-path:inset(58% 0 22% 0);transform:translateX(6px)}6%{opacity:1;clip-path:inset(30% 0 48% 0);transform:translateX(-3px)}9%{opacity:1;clip-path:inset(74% 0 6% 0);transform:translateX(9px)}12%{opacity:1;clip-path:inset(42% 0 40% 0);transform:translateX(-2px)}15%,100%{opacity:0;clip-path:inset(0 0 100% 0);transform:none}}',
     '@keyframes xr-g2{0%{opacity:1;clip-path:inset(62% 0 18% 0);transform:translateX(5px)}3%{opacity:1;clip-path:inset(8% 0 76% 0);transform:translateX(-6px)}6%{opacity:1;clip-path:inset(48% 0 34% 0);transform:translateX(4px)}9%{opacity:1;clip-path:inset(22% 0 60% 0);transform:translateX(-8px)}12%{opacity:0}15%,100%{opacity:0;clip-path:inset(0 0 100% 0);transform:none}}',
@@ -68,7 +80,7 @@
     '[data-flick-cards-item-status="2-before"] .flick-card__media,[data-flick-cards-item-status="2-after"] .flick-card__media{opacity:.75}',
     '[data-flick-cards-item-status="active"] .flick-card__media{opacity:1}',
 
-    '@media (prefers-reduced-motion:reduce){.xr .inv,.us-xray-scope{transition:none}.xr:hover .g1,.xr:hover .g2,.xr:hover .lbl,.xr:hover .scan,.xr:focus-visible .g1,.xr:focus-visible .g2,.xr:focus-visible .lbl,.xr:focus-visible .scan{animation:none}.us-xray-flash{display:none}}'
+    '@media (prefers-reduced-motion:reduce){.xr .inv,.us-xray-scope{transition:none}.xr .g1,.xr .g2,.xr .lbl,.xr .scan{animation:none!important}.us-xray-flash{display:none}}'
   ].join('');
   var style = document.createElement('style');
   style.setAttribute('data-us-bundle', '');
@@ -82,6 +94,7 @@
 
   ready(function () {
     initXray();
+    initLogoFly();
     initLogoVideos();
     initCardVideos();
     initFlickCards();
@@ -124,6 +137,75 @@
     }
   }
 
+  /* ---------- Chrome logo: big in the hero, glides into the nav on scroll ----------
+     Runs only while something is changing (scroll, resize, menu animating), then idles to save battery. */
+  function initLogoFly() {
+    var fly = document.querySelector('.us-logo-fly');
+    var slot = document.querySelector('.twostep-nav__logo');
+    var nav = document.querySelector('[data-nav-status]');
+    if (!fly || !slot) return;
+    var img = fly.querySelector('img');
+    if (img) { img.removeAttribute('srcset'); img.removeAttribute('sizes'); }
+
+    function swapVideo(cls, target, width) {
+      var v = document.createElement('video');
+      v.className = cls;
+      v.muted = true; v.loop = true; v.autoplay = !REDUCED; v.playsInline = true;
+      v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('aria-hidden', 'true');
+      v.preload = 'auto';
+      v.style.display = 'block'; v.style.width = width || '100%'; v.style.height = 'auto';
+      v.addEventListener('loadeddata', function () {
+        if (target && target.parentNode) target.parentNode.replaceChild(v, target);
+        if (!REDUCED) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+      }, { once: true });
+      v.src = LOGO_SRC; v.load();
+    }
+    if (img) swapVideo('us-logo-fly__img', img);
+    var visual = document.querySelector('.twostep-nav__visual');
+    if (visual && !visual.querySelector('img,video')) {
+      var ph = document.createElement('span'); visual.appendChild(ph);
+      swapVideo('twostep-nav__visual-img', ph, '80%');
+    }
+
+    var hero = document.querySelector('.us-hero'), spot = document.querySelector('.us-hero__logo-spot');
+    var AR = 632 / 960, p = null, running = false, still = 0, last = '';
+    function clamp(n) { return n < 0 ? 0 : n > 1 ? 1 : n; }
+    function ease(t) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+    function tick() {
+      var s = slot.getBoundingClientRect();
+      var endW = Math.min(s.width, s.height / AR), endX = s.left, endY = s.top + (s.height - endW * AR) / 2;
+      var startW = endW, startX = endX, startY = endY, target = 1;
+      if (spot && hero) {
+        var r = spot.getBoundingClientRect();
+        startW = r.width; startX = r.left; startY = r.top + window.scrollY;
+        target = clamp(window.scrollY / (hero.offsetHeight * 0.55));
+      }
+      if (nav && nav.getAttribute('data-nav-status') === 'active') target = 1;
+      if (p === null) { p = target; fly.classList.add('is-ready'); }
+      else if (REDUCED) p = target;
+      else { p += (target - p) * 0.2; if (Math.abs(target - p) < 0.001) p = target; }
+      var e = ease(p), w = startW + (endW - startW) * e, x = startX + (endX - startX) * e, y = startY + (endY - startY) * e;
+      var key = Math.round(x * 10) + ',' + Math.round(y * 10) + ',' + Math.round(w * 10);
+      if (key !== last) {
+        fly.style.width = startW + 'px';
+        fly.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0) scale(' + (w / startW) + ')';
+        last = key; still = 0;
+      } else still++;
+      if (still > 30) { running = false; return; }
+      requestAnimationFrame(tick);
+    }
+    function wake() { still = 0; if (!running) { running = true; requestAnimationFrame(tick); } }
+    window.addEventListener('scroll', wake, { passive: true });
+    window.addEventListener('resize', wake);
+    window.addEventListener('orientationchange', wake);
+    document.addEventListener('click', wake, true);
+    document.addEventListener('keydown', wake);
+    if (nav && 'MutationObserver' in window) new MutationObserver(wake).observe(nav, { attributes: true, attributeFilter: ['data-nav-status'] });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(wake);
+    window.addEventListener('load', wake);
+    wake();
+  }
+
   /* ---------- Spinning logo video in any [data-us-logo-video] box ---------- */
   function initLogoVideos() {
     var boxes = document.querySelectorAll('[data-us-logo-video]');
@@ -136,6 +218,7 @@
       v.style.display = 'block'; v.style.width = '100%'; v.style.height = 'auto';
       v.src = LOGO_SRC;
       boxes[i].appendChild(v);
+      if (REDUCED) { v.autoplay = false; v.removeAttribute('autoplay'); continue; }
       var p = v.play(); if (p && p.catch) p.catch(function () {});
     }
   }
@@ -149,12 +232,24 @@
       var v = document.createElement('video');
       v.muted = true; v.loop = true; v.playsInline = true;
       v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
-      v.preload = 'metadata';
+      v.preload = SAVE_DATA ? 'none' : 'metadata';
       v.poster = VIDEO_BASE + name + '-poster.jpg';
       v.src = VIDEO_BASE + name + '.mp4';
       v.setAttribute('aria-label', name + ' video');
       v.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none';
       boxes[i].appendChild(v);
+      boxes[i].addEventListener('click', function () {
+        var vid = this.querySelector('video');
+        if (!vid) return;
+        var card = this.closest('[data-flick-cards-item]');
+        if (card && card.getAttribute('data-flick-cards-item-status') !== 'active') return;
+        /* touch screens can fire a tap twice (Draggable + the browser); count it once */
+        var now = Date.now(), lastTap = +(vid.getAttribute('data-us-tap') || 0);
+        if (now - lastTap < 400) return;
+        vid.setAttribute('data-us-tap', now);
+        if (vid.paused) { vid.setAttribute('data-us-user-play', '1'); vid.removeAttribute('data-us-user-paused'); var p = vid.play(); if (p && p.catch) p.catch(function () {}); }
+        else { vid.removeAttribute('data-us-user-play'); vid.setAttribute('data-us-user-paused', '1'); vid.pause(); }
+      });
     }
   }
 
@@ -166,7 +261,7 @@
       entries.forEach(function (en) {
         var v = en.target.querySelector('video');
         if (!v) return;
-        if (en.isIntersecting) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+        if (en.isIntersecting && AUTOPLAY) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
         else v.pause();
       });
     }, { threshold: 0.15 });
@@ -288,8 +383,13 @@
         cards.forEach(function (card, i) {
           var v = card.querySelector('video');
           if (!v) return;
-          if (i === activeIndex && slider.getAttribute('data-us-in-view') !== 'false') { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
-          else v.pause();
+          var front = i === activeIndex && slider.getAttribute('data-us-in-view') !== 'false';
+          var wanted = !v.hasAttribute('data-us-user-paused') && (AUTOPLAY || v.hasAttribute('data-us-user-play'));
+          if (front && wanted) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+          else {
+            v.pause();
+            if (i !== activeIndex) { v.removeAttribute('data-us-user-play'); v.removeAttribute('data-us-user-paused'); }
+          }
         });
       }
 

@@ -18,7 +18,7 @@
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var SAVE_DATA = !!(navigator.connection && navigator.connection.saveData);
   var AUTOPLAY = !REDUCED && !SAVE_DATA;
-  var XRAY_SCOPE = '.us-hero,.us-section,.us-videos,.us-reviews,.us-footer,.us-logo-fly';
+  var XRAY_SCOPE = '.us-hero,.us-section,.us-reviews,.us-footer,.us-logo-fly'  /* films section (.us-videos) deliberately left out */;
 
   /* ---------- Styles Webflow's designer can't hold (keyframes, states, masks) ---------- */
   var css = [
@@ -47,6 +47,8 @@
     '.us-hero{min-height:100vh;min-height:100svh}',
     /* Card video tap-to-play hint */
     '.flick-card__video{cursor:pointer}',
+    /* Flying logo: hidden and click-through until placed (keeps it out of the way in the Webflow Designer) */
+    '.us-logo-fly.is-ready{opacity:1;pointer-events:auto}',
     '@keyframes xr-scan{0%{opacity:1;top:0}88%{opacity:1;top:calc(100% - 2px)}100%{opacity:0;top:calc(100% - 2px)}}',
     '@keyframes xr-g1{0%{opacity:1;clip-path:inset(12% 0 66% 0);transform:translateX(-7px)}3%{opacity:1;clip-path:inset(58% 0 22% 0);transform:translateX(6px)}6%{opacity:1;clip-path:inset(30% 0 48% 0);transform:translateX(-3px)}9%{opacity:1;clip-path:inset(74% 0 6% 0);transform:translateX(9px)}12%{opacity:1;clip-path:inset(42% 0 40% 0);transform:translateX(-2px)}15%,100%{opacity:0;clip-path:inset(0 0 100% 0);transform:none}}',
     '@keyframes xr-g2{0%{opacity:1;clip-path:inset(62% 0 18% 0);transform:translateX(5px)}3%{opacity:1;clip-path:inset(8% 0 76% 0);transform:translateX(-6px)}6%{opacity:1;clip-path:inset(48% 0 34% 0);transform:translateX(4px)}9%{opacity:1;clip-path:inset(22% 0 60% 0);transform:translateX(-8px)}12%{opacity:0}15%,100%{opacity:0;clip-path:inset(0 0 100% 0);transform:none}}',

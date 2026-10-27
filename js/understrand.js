@@ -15,7 +15,7 @@
   var LOGO_SRC = LOGO_BASE + (IS_SAFARI ? 'understrand-chrome-logo-hevc.mov' : 'understrand-chrome-logo.webm');
   var VIDEO_BASE = 'https://cdn.jsdelivr.net/gh/Jame55-Design/Understrand@3b86d14557d73e2a93de46681e0f60b8fe80644d/videos/understrand-';
   var XRAY_KEY = 'us-xray';
-  var XRAY_SCOPE = '.us-hero,.us-section,.us-videos,.us-footer,.us-logo-fly';
+  var XRAY_SCOPE = '.us-hero,.us-section,.us-videos,.us-reviews,.us-footer,.us-logo-fly';
 
   /* ---------- Styles Webflow's designer can't hold (keyframes, states, masks) ---------- */
   var css = [
@@ -85,6 +85,7 @@
     initLogoVideos();
     initCardVideos();
     initFlickCards();
+    initOverlapSlider();
     initPlayPause();
   });
 
@@ -170,6 +171,78 @@
       });
     }, { threshold: 0.15 });
     for (var i = 0; i < els.length; i++) io.observe(els[i]);
+  }
+
+  /* ---------- Overlapping slider (Osmo), for reviews. Needs GSAP + Draggable + InertiaPlugin ---------- */
+  function initOverlapSlider() {
+    var inits = document.querySelectorAll('[data-overlap-slider-init]');
+    if (!inits.length || !window.gsap || !window.Draggable) return;
+    if (window.InertiaPlugin) gsap.registerPlugin(Draggable, InertiaPlugin); else gsap.registerPlugin(Draggable);
+
+    inits.forEach(function (init) {
+      var minScale = parseFloat(init.getAttribute('data-scale') || '0.45');
+      var maxRotation = parseFloat(init.getAttribute('data-rotate') || '-8');
+      var wrap = init.querySelector('[data-overlap-slider-collection]');
+      var slider = init.querySelector('[data-overlap-slider-list]');
+      var slides = Array.prototype.slice.call(init.querySelectorAll('[data-overlap-slider-item]'));
+      if (!wrap || !slider || !slides.length) return;
+
+      wrap.style.touchAction = 'pan-y';
+      wrap.style.userSelect = 'none';
+      var spacing = 0, maxDrag = 0, dragX = 0, draggable, current = 0, inView = false;
+
+      function clamp(v) { return maxDrag <= 0 ? 0 : Math.min(Math.max(v, 0), maxDrag); }
+      function update() {
+        gsap.set(slider, { x: -dragX });
+        slides.forEach(function (slide, i) {
+          var local = Math.max(0, dragX - i * spacing);
+          var t = spacing > 0 ? Math.min(local / spacing, 1) : 0;
+          gsap.set(slide, { x: local, scale: 1 - (1 - minScale) * t, rotation: maxRotation * t, transformOrigin: '75% center' });
+        });
+        current = spacing > 0 ? Math.round(dragX / spacing) : 0;
+      }
+      function recalc() {
+        var gap = parseFloat(getComputedStyle(slides[0]).marginRight) || 0;
+        spacing = slides[0].offsetWidth + gap;
+        maxDrag = spacing * (slides.length - 1);
+        dragX = clamp(dragX);
+        update();
+        if (draggable) draggable.applyBounds({ minX: -maxDrag, maxX: 0 });
+      }
+
+      draggable = Draggable.create(slider, {
+        type: 'x',
+        bounds: { minX: -maxDrag, maxX: 0 },
+        inertia: !!window.InertiaPlugin,
+        maxDuration: 1,
+        snap: function (raw) { var d = clamp(-raw); return -(spacing > 0 ? Math.round(d / spacing) : 0) * spacing; },
+        onDrag: function () { dragX = clamp(-this.x); update(); },
+        onThrowUpdate: function () { dragX = clamp(-this.x); update(); },
+        onRelease: function () { if (!window.InertiaPlugin) goTo(Math.round(clamp(-this.x) / spacing)); }
+      })[0];
+
+      function goTo(idx) {
+        idx = Math.max(0, Math.min(idx, slides.length - 1));
+        var o = { v: dragX };
+        gsap.to(o, { v: idx * spacing, duration: 0.35, ease: 'power4.out', onUpdate: function () { dragX = o.v; update(); draggable.update(); } });
+        wrap.setAttribute('aria-label', 'Review ' + (idx + 1) + ' of ' + slides.length);
+      }
+
+      if ('ResizeObserver' in window) new ResizeObserver(recalc).observe(init);
+      if ('IntersectionObserver' in window) new IntersectionObserver(function (e) { inView = e[0].isIntersecting; }, { threshold: 0.25 }).observe(init);
+      wrap.setAttribute('role', 'region');
+      wrap.setAttribute('aria-roledescription', 'carousel');
+      wrap.setAttribute('aria-label', 'Reviews');
+      window.addEventListener('keydown', function (e) {
+        if (!inView) return;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(current - 1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); goTo(current + 1); }
+      });
+      var prev = init.parentNode.querySelector('[data-overlap-prev]'), next = init.parentNode.querySelector('[data-overlap-next]');
+      if (prev) prev.addEventListener('click', function (e) { e.preventDefault(); goTo(current - 1); });
+      if (next) next.addEventListener('click', function (e) { e.preventDefault(); goTo(current + 1); });
+      recalc();
+    });
   }
 
   /* ---------- Flick cards slider (Osmo), needs GSAP + Draggable ---------- */

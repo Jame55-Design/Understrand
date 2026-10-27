@@ -46,6 +46,7 @@
     return el;
   }
   var VIDEO_BASE = 'https://cdn.jsdelivr.net/gh/Jame55-Design/Understrand@3b86d14557d73e2a93de46681e0f60b8fe80644d/videos/understrand-';
+  var HERO_BASE = 'https://cdn.jsdelivr.net/gh/Jame55-Design/Understrand@0e8b8a2625560f161f52742d70aa15f0d16861f8/videos/understrand-hero-';
   var XRAY_KEY = 'us-xray';
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var SAVE_DATA = !!(navigator.connection && navigator.connection.saveData);
@@ -99,14 +100,21 @@
 
     /* Progressive blur along the top, under the nav */
     /* Progressive blur along the bottom of the screen; clears the iPhone home bar and hides over the footer */
-    '.progressive-blur{z-index:40;pointer-events:none;isolation:isolate;contain:paint;width:100%;height:calc(7em + env(safe-area-inset-bottom,0px));position:fixed;top:auto;bottom:0;left:0;overflow:hidden;transform:translateZ(0);transition:opacity .4s ease}',
+    '.progressive-blur{z-index:40;pointer-events:none;isolation:isolate;contain:paint;width:100%;height:calc(9em + env(safe-area-inset-bottom,0px));position:fixed;top:auto;bottom:0;left:0;overflow:hidden;transform:translateZ(0);transition:opacity .4s ease}',
     '.progressive-blur.is-hidden{opacity:0}',
     '.progressive-blur__layer{position:absolute;inset:0}',
-    '.progressive-blur__layer.is--1{-webkit-backdrop-filter:blur(.09375em);backdrop-filter:blur(.09375em);-webkit-mask:linear-gradient(#0000 50%,#000 62.5% 75%,#0000 87.5%);mask:linear-gradient(#0000 50%,#000 62.5% 75%,#0000 87.5%)}',
-    '.progressive-blur__layer.is--2{-webkit-backdrop-filter:blur(.1875em);backdrop-filter:blur(.1875em);-webkit-mask:linear-gradient(#0000 62.5%,#000 75% 87.5%,#0000 100%);mask:linear-gradient(#0000 62.5%,#000 75% 87.5%,#0000 100%)}',
-    '.progressive-blur__layer.is--3{-webkit-backdrop-filter:blur(.375em);backdrop-filter:blur(.375em);-webkit-mask:linear-gradient(#0000 75%,#000 87.5% 100%);mask:linear-gradient(#0000 75%,#000 87.5% 100%)}',
-    '.progressive-blur__layer.is--4{-webkit-backdrop-filter:blur(.75em);backdrop-filter:blur(.75em);-webkit-mask:linear-gradient(#0000 82%,#000 92% 100%);mask:linear-gradient(#0000 82%,#000 92% 100%)}',
-    '.progressive-blur__layer.is--5{-webkit-backdrop-filter:blur(1.5em);backdrop-filter:blur(1.5em);-webkit-mask:linear-gradient(#0000 88%,#000 100%);mask:linear-gradient(#0000 88%,#000 100%)}',
+    '.progressive-blur__layer.is--1{-webkit-backdrop-filter:blur(.09375em);backdrop-filter:blur(.09375em);-webkit-mask:linear-gradient(#0000 40%,#000 52% 62%,#0000 74%);mask:linear-gradient(#0000 40%,#000 52% 62%,#0000 74%)}',
+    '.progressive-blur__layer.is--2{-webkit-backdrop-filter:blur(.1875em);backdrop-filter:blur(.1875em);-webkit-mask:linear-gradient(#0000 52%,#000 64% 74%,#0000 86%);mask:linear-gradient(#0000 52%,#000 64% 74%,#0000 86%)}',
+    '.progressive-blur__layer.is--3{-webkit-backdrop-filter:blur(.375em);backdrop-filter:blur(.375em);-webkit-mask:linear-gradient(#0000 64%,#000 76% calc(100% - 1.5em),#0000 100%);mask:linear-gradient(#0000 64%,#000 76% calc(100% - 1.5em),#0000 100%)}',
+    '.progressive-blur__layer.is--4{-webkit-backdrop-filter:blur(.75em);backdrop-filter:blur(.75em);-webkit-mask:linear-gradient(#0000 72%,#000 84% calc(100% - 1.5em),#0000 100%);mask:linear-gradient(#0000 72%,#000 84% calc(100% - 1.5em),#0000 100%)}',
+    '.progressive-blur__layer.is--5{-webkit-backdrop-filter:blur(1.5em);backdrop-filter:blur(1.5em);-webkit-mask:linear-gradient(#0000 78%,#000 88% calc(100% - 1.5em),#0000 100%);mask:linear-gradient(#0000 78%,#000 88% calc(100% - 1.5em),#0000 100%)}',
+
+    /* Hero background video: fills the hero behind everything */
+    '.us-hero__video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none}',
+    '.us-hero__logo-spot,.us-hero__scroll{z-index:1}',
+    '.us-hero__logo-spot{position:relative}',
+    /* x-ray leaves the hero film looking as shot (cancels the section invert) */
+    'html.is-xray .us-xray-scope video.us-hero__video{filter:invert(1) hue-rotate(180deg)}',
 
     /* Review slider: keep its card stacking inside the section so cards never slide over the nav */
     '.overlapping-slider__wrap{position:relative;isolation:isolate;z-index:0}',
@@ -133,6 +141,7 @@
 
   ready(function () {
     initXray();
+    initHeroVideo();
     initLogoFly();
     initLogoVideos();
     initCardVideos();
@@ -182,6 +191,33 @@
         set(!root.classList.contains('is-xray'), true);
       });
     }
+  }
+
+  /* ---------- Hero background film ----------
+     Portrait-shaped screens get the portrait crop, everything else the 16:9 cut. Muted, looping, inline.
+     Pauses when the hero is off screen. Reduced motion or data saver: shows the still frame only. */
+  function initHeroVideo() {
+    var hero = document.querySelector('.us-hero');
+    if (!hero || hero.querySelector('.us-hero__video')) return;
+    var portrait = window.matchMedia('(max-aspect-ratio: 4/5)').matches;
+    var kind = portrait ? 'mobile' : 'desktop';
+    var v = document.createElement('video');
+    v.className = 'us-hero__video';
+    v.muted = true; v.loop = true; v.playsInline = true;
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+    v.setAttribute('aria-hidden', 'true'); v.setAttribute('disablepictureinpicture', '');
+    v.poster = HERO_BASE + kind + '-poster.jpg';
+    v.preload = AUTOPLAY ? 'auto' : 'none';
+    if (AUTOPLAY) { v.autoplay = true; v.setAttribute('autoplay', ''); }
+    v.src = HERO_BASE + kind + '.mp4';
+    hero.insertBefore(v, hero.firstChild);
+    if (!AUTOPLAY) return;
+    function play() { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+    play();
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (e) { if (e[0].isIntersecting) play(); else v.pause(); }, { threshold: 0 }).observe(hero);
+    }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) play(); });
   }
 
   /* ---------- Chrome logo: big in the hero, glides into the nav on scroll ----------

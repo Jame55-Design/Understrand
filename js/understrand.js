@@ -1,7 +1,7 @@
 /* Understrand site bundle
    - X-ray toggle (two-state page invert, remembered per visitor)
    - X-ray glitch button animation
-   - Progressive blur behind the nav
+   - Hero background film, overlapping review slider
    - Spinning chrome logo video anywhere with [data-us-logo-video]
    - Flick cards slider (needs GSAP + Draggable on the page)
    - Play / pause videos on scroll ([data-video="playpause"])
@@ -98,17 +98,6 @@
     '.us-xray-flash{position:fixed;left:0;right:0;top:0;height:2px;z-index:200;background:' + ACCENT + ';pointer-events:none;animation:us-xray-sweep .6s cubic-bezier(.625,.05,0,1) forwards}',
     '@keyframes us-xray-sweep{0%{top:0;opacity:1}90%{top:calc(100vh - 2px);opacity:1}100%{top:calc(100vh - 2px);opacity:0}}',
 
-    /* Progressive blur along the top, under the nav */
-    /* Progressive blur along the bottom of the screen; clears the iPhone home bar and hides over the footer */
-    '.progressive-blur{z-index:40;pointer-events:none;isolation:isolate;contain:paint;width:100%;height:calc(9em + env(safe-area-inset-bottom,0px));position:fixed;top:auto;bottom:0;left:0;overflow:hidden;transform:translateZ(0);transition:opacity .4s ease}',
-    '.progressive-blur.is-hidden{opacity:0}',
-    '.progressive-blur__layer{position:absolute;inset:0}',
-    '.progressive-blur__layer.is--1{-webkit-backdrop-filter:blur(.09375em);backdrop-filter:blur(.09375em);-webkit-mask:linear-gradient(#0000 40%,#000 52% 62%,#0000 74%);mask:linear-gradient(#0000 40%,#000 52% 62%,#0000 74%)}',
-    '.progressive-blur__layer.is--2{-webkit-backdrop-filter:blur(.1875em);backdrop-filter:blur(.1875em);-webkit-mask:linear-gradient(#0000 52%,#000 64% 74%,#0000 86%);mask:linear-gradient(#0000 52%,#000 64% 74%,#0000 86%)}',
-    '.progressive-blur__layer.is--3{-webkit-backdrop-filter:blur(.375em);backdrop-filter:blur(.375em);-webkit-mask:linear-gradient(#0000 64%,#000 76% calc(100% - 1.5em),#0000 100%);mask:linear-gradient(#0000 64%,#000 76% calc(100% - 1.5em),#0000 100%)}',
-    '.progressive-blur__layer.is--4{-webkit-backdrop-filter:blur(.75em);backdrop-filter:blur(.75em);-webkit-mask:linear-gradient(#0000 72%,#000 84% calc(100% - 1.5em),#0000 100%);mask:linear-gradient(#0000 72%,#000 84% calc(100% - 1.5em),#0000 100%)}',
-    '.progressive-blur__layer.is--5{-webkit-backdrop-filter:blur(1.5em);backdrop-filter:blur(1.5em);-webkit-mask:linear-gradient(#0000 78%,#000 88% calc(100% - 1.5em),#0000 100%);mask:linear-gradient(#0000 78%,#000 88% calc(100% - 1.5em),#0000 100%)}',
-
     /* Hero background video: fills the hero behind everything */
     '.us-hero__video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none}',
     '.us-hero__logo-spot,.us-hero__scroll{z-index:1}',
@@ -148,15 +137,7 @@
     initFlickCards();
     initOverlapSlider();
     initPlayPause();
-    initBlur();
   });
-
-  /* ---------- Progressive blur: fade out once the footer is on screen ---------- */
-  function initBlur() {
-    var blur = document.querySelector('.progressive-blur'), foot = document.querySelector('.us-footer');
-    if (!blur || !foot || !('IntersectionObserver' in window)) return;
-    new IntersectionObserver(function (e) { blur.classList.toggle('is-hidden', e[0].isIntersecting); }, { threshold: 0 }).observe(foot);
-  }
 
   /* ---------- X-ray toggle ---------- */
   function initXray() {

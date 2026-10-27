@@ -11,8 +11,40 @@
 
   var ACCENT = '#1986DE';
   var LOGO_BASE = 'https://cdn.jsdelivr.net/gh/Jame55-Design/Understrand@345045853cd96b34279bb624efbf0bfa7b1723ff/logo/';
-  var IS_SAFARI = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
-  var LOGO_SRC = LOGO_BASE + (IS_SAFARI ? 'understrand-chrome-logo-hevc.mov' : 'understrand-chrome-logo.webm');
+  /* Safari and every iPhone/iPad browser (all WebKit) can't show a transparent WebM, so they get the
+     transparent animated WebP instead; everything else gets the lighter WebM video. */
+  var UA = navigator.userAgent;
+  var IS_IOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var IS_SAFARI = /^((?!chrome|android|crios|fxios|edg).)*safari/i.test(UA);
+  var LOGO_AS_IMAGE = IS_IOS || IS_SAFARI;
+  var LOGO_SRC = LOGO_BASE + 'understrand-chrome-logo.webm';
+  var LOGO_WEBP = 'https://cdn.jsdelivr.net/gh/Jame55-Design/Understrand@57dcd0dc303f308380711c7c80718b4f2bd98f1c/logo/understrand-chrome-logo-smooth.webp';
+
+  /* One spinning logo element: an animated WebP <img> on Safari/iPhone, a looping <video> elsewhere.
+     onReady fires once it has something to show. */
+  function makeLogo(cls, width, onReady) {
+    var el;
+    if (LOGO_AS_IMAGE) {
+      el = document.createElement('img');
+      el.alt = ''; el.decoding = 'async';
+      el.addEventListener('load', function () { onReady && onReady(el); }, { once: true });
+      el.src = LOGO_WEBP;
+    } else {
+      el = document.createElement('video');
+      el.muted = true; el.loop = true; el.autoplay = !REDUCED; el.playsInline = true;
+      el.setAttribute('muted', ''); el.setAttribute('playsinline', '');
+      el.preload = 'auto';
+      el.addEventListener('loadeddata', function () {
+        onReady && onReady(el);
+        if (!REDUCED) { var pl = el.play(); if (pl && pl.catch) pl.catch(function () {}); }
+      }, { once: true });
+      el.src = LOGO_SRC; el.load();
+    }
+    if (cls) el.className = cls;
+    el.setAttribute('aria-hidden', 'true');
+    el.style.display = 'block'; el.style.width = width || '100%'; el.style.height = 'auto';
+    return el;
+  }
   var VIDEO_BASE = 'https://cdn.jsdelivr.net/gh/Jame55-Design/Understrand@3b86d14557d73e2a93de46681e0f60b8fe80644d/videos/understrand-';
   var XRAY_KEY = 'us-xray';
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -150,17 +182,7 @@
     if (img) { img.removeAttribute('srcset'); img.removeAttribute('sizes'); }
 
     function swapVideo(cls, target, width) {
-      var v = document.createElement('video');
-      v.className = cls;
-      v.muted = true; v.loop = true; v.autoplay = !REDUCED; v.playsInline = true;
-      v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('aria-hidden', 'true');
-      v.preload = 'auto';
-      v.style.display = 'block'; v.style.width = width || '100%'; v.style.height = 'auto';
-      v.addEventListener('loadeddata', function () {
-        if (target && target.parentNode) target.parentNode.replaceChild(v, target);
-        if (!REDUCED) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
-      }, { once: true });
-      v.src = LOGO_SRC; v.load();
+      makeLogo(cls, width, function (el) { if (target && target.parentNode) target.parentNode.replaceChild(el, target); });
     }
     if (img) swapVideo('us-logo-fly__img', img);
     var visual = document.querySelector('.twostep-nav__visual');
@@ -212,16 +234,8 @@
   function initLogoVideos() {
     var boxes = document.querySelectorAll('[data-us-logo-video]');
     for (var i = 0; i < boxes.length; i++) {
-      if (boxes[i].querySelector('video')) continue;
-      var v = document.createElement('video');
-      v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
-      v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('aria-hidden', 'true');
-      v.preload = 'auto';
-      v.style.display = 'block'; v.style.width = '100%'; v.style.height = 'auto';
-      v.src = LOGO_SRC;
-      boxes[i].appendChild(v);
-      if (REDUCED) { v.autoplay = false; v.removeAttribute('autoplay'); continue; }
-      var p = v.play(); if (p && p.catch) p.catch(function () {});
+      if (boxes[i].querySelector('video,img')) continue;
+      boxes[i].appendChild(makeLogo('', '100%'));
     }
   }
 
@@ -302,15 +316,23 @@
 
       wrap.style.touchAction = 'pan-y';
       wrap.style.userSelect = 'none';
-      var spacing = 0, maxDrag = 0, dragX = 0, draggable, current = LOOP ? base * 2 : 0, inView = false, tween = null;
+      var spacing = 0, slideW = 0, rightLimit = 0, offset = 0, maxDrag = 0, dragX = 0, draggable, current = LOOP ? base * 2 : 0, inView = false, tween = null;
 
       function clamp(v) { return maxDrag <= 0 ? 0 : Math.min(Math.max(v, 0), maxDrag); }
       function update() {
-        gsap.set(slider, { x: -dragX });
+        gsap.set(slider, { x: offset - dragX });
         slides.forEach(function (slide, i) {
-          var local = Math.max(0, dragX - i * spacing);
-          var t = spacing > 0 ? Math.min(local / spacing, 1) : 0;
-          gsap.set(slide, { x: local, scale: 1 - (1 - minScale) * t, rotation: maxRotation * t, transformOrigin: '75% center' });
+          var pos = i * spacing - dragX;                       /* where the card would sit, from the left edge */
+          var left = Math.max(0, -pos);                        /* how far it has gone past the left edge */
+          var right = Math.max(0, pos - rightLimit);           /* how far it would run past the right edge */
+          var tl = spacing > 0 ? Math.min(left / spacing, 1) : 0;
+          var tr = spacing > 0 ? Math.min(right / spacing, 1) : 0;
+          if (right > 0) {
+            /* mirror of the left stack: pinned to the right edge, shrinking and tilting the other way */
+            gsap.set(slide, { x: -right, scale: 1 - (1 - minScale) * tr, rotation: -maxRotation * tr, transformOrigin: '25% center', zIndex: 500 - i });
+          } else {
+            gsap.set(slide, { x: left, scale: 1 - (1 - minScale) * tl, rotation: maxRotation * tl, transformOrigin: '75% center', zIndex: left > 0 ? i : 1000 + i });
+          }
         });
         current = spacing > 0 ? Math.round(dragX / spacing) : 0;
       }
@@ -328,11 +350,16 @@
       }
       function recalc() {
         var gap = parseFloat(getComputedStyle(slides[0]).marginRight) || 0;
-        spacing = slides[0].offsetWidth + gap;
+        slideW = slides[0].offsetWidth;
+        spacing = slideW + gap;
+        /* last spot where a whole card still fits; anything beyond stacks on the right */
+        rightLimit = Math.max(0, Math.floor((wrap.offsetWidth - slideW) / spacing) * spacing);
+        /* centre the fully visible cards so the stacks either side are even */
+        offset = Math.max(0, (wrap.offsetWidth - (rightLimit + slideW)) / 2);
         maxDrag = spacing * (slides.length - 1);
         dragX = clamp(current * spacing);
         update();
-        if (draggable) { draggable.applyBounds({ minX: -maxDrag, maxX: 0 }); draggable.update(); }
+        if (draggable) { draggable.applyBounds({ minX: offset - maxDrag, maxX: offset }); draggable.update(); }
       }
 
       draggable = Draggable.create(slider, {
@@ -340,13 +367,13 @@
         bounds: { minX: -maxDrag, maxX: 0 },
         inertia: !!window.InertiaPlugin,
         maxDuration: 1,
-        snap: function (raw) { var d = clamp(-raw); return -(spacing > 0 ? Math.round(d / spacing) : 0) * spacing; },
+        snap: function (raw) { var d = clamp(offset - raw); return offset - (spacing > 0 ? Math.round(d / spacing) : 0) * spacing; },
         onPress: function () { if (tween) { tween.kill(); tween = null; } },
-        onDrag: function () { dragX = clamp(-this.x); update(); },
-        onThrowUpdate: function () { dragX = clamp(-this.x); update(); },
+        onDrag: function () { dragX = clamp(offset - this.x); update(); },
+        onThrowUpdate: function () { dragX = clamp(offset - this.x); update(); },
         onThrowComplete: normalize,
         onRelease: function () {
-          if (!window.InertiaPlugin) goTo(Math.round(clamp(-this.x) / spacing));
+          if (!window.InertiaPlugin) goTo(Math.round(clamp(offset - this.x) / spacing));
           else if (!this.tween || !this.tween.isActive()) normalize();
         }
       })[0];

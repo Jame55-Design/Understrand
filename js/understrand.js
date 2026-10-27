@@ -361,7 +361,16 @@
         if (shift) { dragX += shift * spacing; update(); if (draggable) draggable.update(); }
         label();
       }
+      /* Every card matches the tallest one, so a longer review stretches the whole row instead of one card */
+      function equalize() {
+        var cards = slides.map(function (sl) { return sl.firstElementChild; }).filter(Boolean);
+        cards.forEach(function (c) { c.style.height = ''; });
+        var tallest = 0;
+        cards.forEach(function (c) { tallest = Math.max(tallest, c.offsetHeight); });
+        if (tallest) cards.forEach(function (c) { c.style.height = tallest + 'px'; });
+      }
       function recalc() {
+        equalize();
         var gap = parseFloat(getComputedStyle(slides[0]).marginRight) || 0;
         slideW = slides[0].offsetWidth;
         spacing = slideW + gap;
@@ -421,6 +430,9 @@
       if (next) next.addEventListener('click', function (e) { e.preventDefault(); goTo(current + 1); });
       recalc();
       label();
+      /* re-measure once the web fonts have loaded, as they change how much space the text needs */
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(recalc);
+      window.addEventListener('load', recalc);
     });
   }
 

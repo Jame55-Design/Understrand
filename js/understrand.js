@@ -270,7 +270,9 @@
     for (var i = 0; i < els.length; i++) io.observe(els[i]);
   }
 
-  /* ---------- Overlapping slider (Osmo), for reviews. Needs GSAP + Draggable + InertiaPlugin ---------- */
+  /* ---------- Overlapping slider (Osmo), for reviews. Needs GSAP + Draggable + InertiaPlugin ----------
+     Add data-loop to the init element for an endless loop: the cards are copied a few times and the
+     slider quietly jumps back by a whole set when you near either end, so it never runs out. */
   function initOverlapSlider() {
     var inits = document.querySelectorAll('[data-overlap-slider-init]');
     if (!inits.length || !window.gsap || !window.Draggable) return;
@@ -281,12 +283,26 @@
       var maxRotation = parseFloat(init.getAttribute('data-rotate') || '-8');
       var wrap = init.querySelector('[data-overlap-slider-collection]');
       var slider = init.querySelector('[data-overlap-slider-list]');
-      var slides = Array.prototype.slice.call(init.querySelectorAll('[data-overlap-slider-item]'));
-      if (!wrap || !slider || !slides.length) return;
+      var originals = Array.prototype.slice.call(init.querySelectorAll('[data-overlap-slider-item]'));
+      if (!wrap || !slider || !originals.length) return;
+
+      var LOOP = init.hasAttribute('data-loop') && originals.length > 1;
+      var base = originals.length, SETS = 6;
+      if (LOOP) {
+        for (var k = 1; k < SETS; k++) {
+          originals.forEach(function (o) {
+            var c = o.cloneNode(true);
+            c.setAttribute('aria-hidden', 'true');
+            c.setAttribute('data-us-clone', '');
+            slider.appendChild(c);
+          });
+        }
+      }
+      var slides = Array.prototype.slice.call(slider.querySelectorAll('[data-overlap-slider-item]'));
 
       wrap.style.touchAction = 'pan-y';
       wrap.style.userSelect = 'none';
-      var spacing = 0, maxDrag = 0, dragX = 0, draggable, current = 0, inView = false;
+      var spacing = 0, maxDrag = 0, dragX = 0, draggable, current = LOOP ? base * 2 : 0, inView = false, tween = null;
 
       function clamp(v) { return maxDrag <= 0 ? 0 : Math.min(Math.max(v, 0), maxDrag); }
       function update() {
@@ -298,13 +314,25 @@
         });
         current = spacing > 0 ? Math.round(dragX / spacing) : 0;
       }
+      function label() {
+        wrap.setAttribute('aria-label', 'Review ' + ((current % base) + 1) + ' of ' + base);
+      }
+      /* Loop: keep the front card inside the middle sets; jumping by whole sets looks identical */
+      function normalize() {
+        if (!LOOP || !spacing) { label(); return; }
+        var idx = Math.round(dragX / spacing), shift = 0;
+        if (idx < base * 2) shift = base * 2;
+        else if (idx >= base * 4) shift = -base * 2;
+        if (shift) { dragX += shift * spacing; update(); if (draggable) draggable.update(); }
+        label();
+      }
       function recalc() {
         var gap = parseFloat(getComputedStyle(slides[0]).marginRight) || 0;
         spacing = slides[0].offsetWidth + gap;
         maxDrag = spacing * (slides.length - 1);
-        dragX = clamp(dragX);
+        dragX = clamp(current * spacing);
         update();
-        if (draggable) draggable.applyBounds({ minX: -maxDrag, maxX: 0 });
+        if (draggable) { draggable.applyBounds({ minX: -maxDrag, maxX: 0 }); draggable.update(); }
       }
 
       draggable = Draggable.create(slider, {
@@ -313,23 +341,29 @@
         inertia: !!window.InertiaPlugin,
         maxDuration: 1,
         snap: function (raw) { var d = clamp(-raw); return -(spacing > 0 ? Math.round(d / spacing) : 0) * spacing; },
+        onPress: function () { if (tween) { tween.kill(); tween = null; } },
         onDrag: function () { dragX = clamp(-this.x); update(); },
         onThrowUpdate: function () { dragX = clamp(-this.x); update(); },
-        onRelease: function () { if (!window.InertiaPlugin) goTo(Math.round(clamp(-this.x) / spacing)); }
+        onThrowComplete: normalize,
+        onRelease: function () {
+          if (!window.InertiaPlugin) goTo(Math.round(clamp(-this.x) / spacing));
+          else if (!this.tween || !this.tween.isActive()) normalize();
+        }
       })[0];
 
       function goTo(idx) {
         idx = Math.max(0, Math.min(idx, slides.length - 1));
+        if (tween) tween.kill();
         var o = { v: dragX };
-        gsap.to(o, { v: idx * spacing, duration: 0.35, ease: 'power4.out', onUpdate: function () { dragX = o.v; update(); draggable.update(); } });
-        wrap.setAttribute('aria-label', 'Review ' + (idx + 1) + ' of ' + slides.length);
+        tween = gsap.to(o, { v: idx * spacing, duration: 0.45, ease: 'power4.out',
+          onUpdate: function () { dragX = o.v; update(); draggable.update(); },
+          onComplete: function () { tween = null; normalize(); } });
       }
 
       if ('ResizeObserver' in window) new ResizeObserver(recalc).observe(init);
       if ('IntersectionObserver' in window) new IntersectionObserver(function (e) { inView = e[0].isIntersecting; }, { threshold: 0.25 }).observe(init);
       wrap.setAttribute('role', 'region');
       wrap.setAttribute('aria-roledescription', 'carousel');
-      wrap.setAttribute('aria-label', 'Reviews');
       window.addEventListener('keydown', function (e) {
         if (!inView) return;
         if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(current - 1); }
@@ -339,6 +373,7 @@
       if (prev) prev.addEventListener('click', function (e) { e.preventDefault(); goTo(current - 1); });
       if (next) next.addEventListener('click', function (e) { e.preventDefault(); goTo(current + 1); });
       recalc();
+      label();
     });
   }
 

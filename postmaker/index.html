@@ -2362,16 +2362,19 @@ $("exportPng").onclick = async () => {
 
 async function pickCodec(w, h) {
   if (typeof VideoEncoder === "undefined" || typeof Mp4Muxer === "undefined") return null;
-  // Best quality first: H.264 High profile, 24 Mbps (Instagram re-compresses, so a rich master keeps detail).
-  for (const codec of ["avc1.640032", "avc1.640028", "avc1.4d0032", "avc1.4d0028", "avc1.42002a"]) {
-    for (const extra of [{ bitrateMode: "variable", latencyMode: "quality" }, {}]) {
-      const cfg = { codec, width: w, height: h, bitrate: 24_000_000, framerate: FPS, avc: { format: "avc" }, ...extra };
+  // Best quality first. "quantizer" mode holds the same quality on every frame, however busy it is
+  // (glitch and scramble frames change completely each frame, which starves a fixed bitrate and goes blurry).
+  // Fallback: a high fixed bitrate. Instagram re-compresses anyway, so a rich master keeps the most detail.
+  for (const codec of ["avc1.640033", "avc1.640032", "avc1.640028", "avc1.4d0032", "avc1.4d0028", "avc1.42002a"]) {
+    for (const extra of [{ bitrateMode: "quantizer", latencyMode: "quality" }, { bitrateMode: "constant", latencyMode: "quality", bitrate: 30_000_000 }, { bitrateMode: "variable", latencyMode: "quality", bitrate: 40_000_000 }, { bitrate: 40_000_000 }]) {
+      const cfg = { codec, width: w, height: h, framerate: FPS, avc: { format: "avc" }, ...extra };
       try { const s = await VideoEncoder.isConfigSupported(cfg); if (s.supported) return cfg; } catch (e) {}
     }
   }
   return null;
 }
 
+const QP = 17;   // H.264 quality step: lower = sharper and bigger. 17 is visually lossless for flat brand colours.
 async function exportWebCodecs(cfg, c, total) {
   const W = c.width, H = c.height, cx = c.getContext("2d");
   const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: "avc", width: W, height: H, frameRate: FPS }, fastStart: "in-memory" });
@@ -2387,7 +2390,7 @@ async function exportWebCodecs(cfg, c, total) {
     if (hasVids) await seekVideosTo(t);
     render(cx, W, H, t, false);
     const vf = new VideoFrame(c, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
-    enc.encode(vf, { keyFrame: i % (FPS * 2) === 0 });
+    enc.encode(vf, cfg.bitrateMode === "quantizer" ? { keyFrame: i % FPS === 0, avc: { quantizer: QP } } : { keyFrame: i % FPS === 0 });
     vf.close();
     while (enc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 4));
     if (i % 5 === 0) { setProgress(i / frames, `Rendering ${Math.round(i / frames * 100)}%`); await new Promise(r => setTimeout(r, 0)); }
@@ -2405,7 +2408,7 @@ async function exportRecorder(c, total) {
   if (!mime) throw new Error("This browser can't record video.");
   const cx = c.getContext("2d");
   const stream = c.captureStream(FPS);
-  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 24_000_000 });
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 40_000_000 });
   const chunks = [];
   rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
   const done = new Promise(r => rec.onstop = r);

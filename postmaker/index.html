@@ -2435,19 +2435,27 @@ async function videoBlob() {
   const cfg = await pickCodec(c.width, c.height);
   if (cfg) {
     exporting = true;
-    try { return { blob: await exportWebCodecs(cfg, c, total), ext: "mp4" }; }
+    try { return { blob: await exportWebCodecs(cfg, c, total), ext: "mp4", how: "frame", secs: total }; }
     finally { exporting = false; }
   }
-  return await exportRecorder(c, total);
+  return { ...(await exportRecorder(c, total)), how: "live", secs: total };
 }
 $("exportMp4").onclick = async () => {
   await assetsReady();
   setBusy(true, "Preparing video");
   try {
-    const { blob, ext } = await videoBlob();
+    const { blob, ext, how, secs } = await videoBlob();
     setProgress(1, "Saving");
     await saveFile(baseName(slideTag(S.cur)) + "." + ext, blob);
-    if (ext === "webm") toast("Saved as WebM. Instagram prefers MP4, so open the page in Chrome or Safari for MP4.");
+    // Quality report, so a blurry file can be traced: the original export vs a copy squashed by a messaging app.
+    const mb = blob.size / 1048576, mbps = (blob.size * 8) / Math.max(0.1, secs) / 1e6;
+    const report = `Video: ${secs.toFixed(1)}s, ${mb.toFixed(1)} MB (${mbps.toFixed(1)} Mbps), ${how === "frame" ? "built frame by frame" : "recorded live"}`;
+    console.info("[Post Maker] " + report);
+    setTimeout(() => {
+      if (ext === "webm") toast("Saved as WebM. Instagram prefers MP4, so open the page in Chrome or Safari for MP4.");
+      else if (how === "live") toast(report + ". This browser can't build videos frame by frame, so quality may drop. Chrome or Safari on a computer gives the sharpest result.");
+      else toast(report + ". Send the original file (AirDrop, email or Drive); messaging apps re-compress video.");
+    }, 900);
   } catch (e) {
     console.error(e);
     toast("Video export failed: " + (e && e.message ? e.message : "unknown error"));

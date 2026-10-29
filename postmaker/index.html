@@ -787,6 +787,7 @@ function loadLib(id) {
     const im = new Image();
     im.onload = () => { IMGS.set(id, { img: im, url: LIBRARY[id].src }); dirty = true; renderLayers(); syncBgImg(); res(); };
     im.onerror = () => { IMGS.delete(id); res(); };
+    im.crossOrigin = "anonymous";   // the app may load these from another host (e.g. embedded on the website)
     im.src = LIBRARY[id].src;
   });
 }
@@ -940,7 +941,7 @@ const isFlat = (v) => v === "wordmark" || v === "wordmark2" || !!VECTORS[v];
 function loadLogo(v) {
   const st = STILLS[v];
   if (st) {
-    if (!st.promise) st.promise = new Promise(res => { const im = new Image(); im.onload = () => { st.img = im; dirty = true; res(); }; im.onerror = () => res(); im.src = st.src; });
+    if (!st.promise) st.promise = new Promise(res => { const im = new Image(); im.crossOrigin = "anonymous"; im.onload = () => { st.img = im; dirty = true; res(); }; im.onerror = () => res(); im.src = st.src; });
     return st.promise;
   }
   const L = LOGOS[v]; if (!L) return Promise.resolve();
@@ -952,6 +953,7 @@ function loadLogo(v) {
     im.decoding = "async";
     im.onload = () => { L.imgs[i] = im; L.loaded++; dirty = true; logoStatus(); res(); };
     im.onerror = () => res();
+    im.crossOrigin = "anonymous";
     im.src = L.prefix + String(i).padStart(3, "0") + ".webp";
   })));
   return L.promise;
@@ -2259,7 +2261,8 @@ const downloadsP = (window.claude && typeof window.claude.use === "function")
 let directSaveOK = true;
 const BLOCKED = ["not_granted", "unavailable", "capability_disabled", "capability_removed", "extension_not_enabled"];
 const inClaude = !!window.claude;
-const framed = (() => { try { return window.top !== window.self; } catch (e) { return true; } })();
+// Only a frame from a different site needs the click-to-download step; a same-site frame can save directly.
+const framed = (() => { try { if (window.top === window.self) return false; void window.top.document.title; return false; } catch (e) { return true; } })();
 async function canSaveDirect() { if (!inClaude) return true; if (!directSaveOK) return false; const dl = await downloadsP; if (!dl) directSaveOK = false; return directSaveOK; }
 async function saveFile(filename, blob, items) {
   const dl = directSaveOK ? await downloadsP : null;

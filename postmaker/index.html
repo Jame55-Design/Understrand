@@ -1437,13 +1437,29 @@ function xrayPixels(ctx, y0, h, alpha) {
   }
   ctx.putImageData(img, 0, y0);
 }
+// For browsers without canvas filters (e.g. Safari 17): invert with a "difference" fill, then put the original
+// colours back with a "color" blend. Runs on the graphics chip, so it's far lighter than working pixel by pixel.
+const scratch2 = document.createElement("canvas");
+function xrayBlend(ctx, y0, h, alpha) {
+  const W = ctx.canvas.width;
+  if (scratch.width !== W || scratch.height < h) { scratch.width = W; scratch.height = Math.max(h, scratch.height); }
+  if (scratch2.width !== W || scratch2.height < h) { scratch2.width = W; scratch2.height = Math.max(h, scratch2.height); }
+  const a = scratch.getContext("2d"), b = scratch2.getContext("2d");
+  a.globalCompositeOperation = "copy"; a.drawImage(ctx.canvas, 0, y0, W, h, 0, 0, W, h); a.globalCompositeOperation = "source-over";
+  b.globalCompositeOperation = "copy"; b.drawImage(scratch, 0, 0, W, h, 0, 0, W, h);
+  b.globalCompositeOperation = "difference"; b.fillStyle = "#fff"; b.fillRect(0, 0, W, h);
+  b.globalCompositeOperation = "color"; b.drawImage(scratch, 0, 0, W, h, 0, 0, W, h);
+  b.globalCompositeOperation = "source-over";
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = alpha; ctx.globalCompositeOperation = "source-over";
+  ctx.drawImage(scratch2, 0, 0, W, h, 0, y0, W, h); ctx.restore();
+}
 function xrayRegion(ctx, y0, y1, alpha) {
   const W = ctx.canvas.width;
   const k = ctx.getTransform().d || 1; y0 *= k; y1 *= k;   // works on scaled-down thumbnails too
   y0 = Math.max(0, Math.floor(y0)); y1 = Math.min(ctx.canvas.height, Math.ceil(y1));
   const h = y1 - y0;
   if (h <= 0 || alpha <= 0) return;
-  if (!canvasFilterOK) { xrayPixels(ctx, y0, h, alpha); return; }
+  if (!canvasFilterOK) { try { xrayBlend(ctx, y0, h, alpha); } catch (e) { xrayPixels(ctx, y0, h, alpha); } return; }
   if (scratch.width !== W || scratch.height < h) { scratch.width = W; scratch.height = Math.max(h, scratch.height); }
   const sx = scratch.getContext("2d");
   sx.clearRect(0, 0, W, h);
@@ -1497,6 +1513,7 @@ function sizeCanvas() {
   const f = fmt();
   if (canvas.width !== f.w || canvas.height !== f.h) { canvas.width = f.w; canvas.height = f.h; }
 }
+let lastRender = 0;
 function frame(ts) {
   const dt = lastTs ? (ts - lastTs) / 1000 : 0;
   lastTs = ts;
@@ -1504,7 +1521,9 @@ function frame(ts) {
   if (playing) { tNow = (tNow + dt) % c; dirty = true; }
   syncVideos(tNow);
   if (videoLayers().length) dirty = true;
-  if (dirty) {
+  // The preview draws at most 30 times a second (the export frame rate), which halves the work on older computers.
+  if (dirty && (!playing || ts - lastRender >= 1000 / FPS - 2)) {
+    lastRender = ts;
     sizeCanvas();
     render(ctx, canvas.width, canvas.height, tNow, true);
     const scrub = document.getElementById("scrub");
@@ -1564,6 +1583,10 @@ const PLAY = '<svg viewBox="0 0 14 14"><path d="M3 1.5v11l9-5.5z"/></svg>';
 const PAUSE = '<svg viewBox="0 0 14 14"><path d="M3 1.5h3v11H3zM8 1.5h3v11H8z"/></svg>';
 function syncPlay() { $("playBtn").innerHTML = playing ? PAUSE : PLAY; $("playBtn").setAttribute("aria-label", playing ? "Pause" : "Play"); }
 $("playBtn").onclick = () => { playing = !playing; syncPlay(); };
+// Pause the preview while the window is in the background, so older computers can rest; carry on when it's back.
+let pausedForBlur = false;
+window.addEventListener("blur", () => { if (playing && !exportingAll && !exporting) { playing = false; pausedForBlur = true; syncPlay(); } });
+window.addEventListener("focus", () => { if (pausedForBlur) { pausedForBlur = false; playing = true; syncPlay(); } });
 $("scrub").addEventListener("input", (e) => { playing = false; syncPlay(); tNow = parseFloat(e.target.value) || 0; dirty = true; });
 $("guides").onchange = () => { dirty = true; };
 function setClean(on) {
@@ -2573,7 +2596,8 @@ function renderStrip() {
 let lastThumb = 0, thumbTurn = 0;
 // Thumbnails draw straight at small size, one per frame in turn, so the main preview stays smooth.
 function drawThumbs(ts) {
-  if (exportingAll || !thumbs.length || ts - lastThumb < 40) return;
+  // Slide thumbnails refresh slowly; they're only there to show the order and roughly what's on each slide.
+  if (exportingAll || !thumbs.length || ts - lastThumb < (playing ? 140 : 500)) return;
   lastThumb = ts;
   const f = fmt();
   const i = thumbTurn++ % thumbs.length;

@@ -15,3 +15,6 @@ Both are 30 fps, 180 frames (6 second loop). Link them by commit, not `@main`, s
 
 ## videos/
 Vertical 720x1280 H.264 MP4s (no sound) for the flick card video slider, each with a `-poster.jpg` still. Made from the 4K masters in "Understrand Alex Videos": cam, felix, finn, lowie, paul, mashup.
+
+## postmaker/
+The Understrand Post Maker (Instagram post, carousel and reel builder), served with GitHub Pages and embedded on a hidden page of the Webflow site. `index.html` is the whole app (ED Nimpkish is built in); `logo/` holds the spinning chrome and glass frames (180 WebP each, 6 s at 30 fps) and the still logos; `library/` holds the built-in pictures and template thumbnails. Not linked from the public site and marked noindex.

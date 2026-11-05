@@ -1346,15 +1346,20 @@ function drawOverlay(ctx, W, H) {
     ctx.moveTo(W - M.side, 0); ctx.lineTo(W - M.side, H);
     ctx.stroke();
     ctx.fillStyle = `rgba(${ink},0.8)`;
-    ctx.font = `500 22px "Space Grotesk", sans-serif`;
+    // Each line says what sits on it, so every post lines up the same way.
+    // Labels sit outside the lines (in the margin), so they never clash with what's placed on them.
+    const fs = Math.max(14, Math.min(24, Math.min(M.top, M.bottom) - 6));
+    ctx.font = `600 ${fs}px "Space Grotesk", sans-serif`;
     if (hasLS) ctx.letterSpacing = "0px";
     ctx.textAlign = "right";
-    ctx.textBaseline = "bottom"; ctx.fillText("Top margin", W - M.side - 8, M.top - 6);
-    ctx.textBaseline = "top"; ctx.fillText("Bottom margin", W - M.side - 8, H - M.bottom + 6);
-    if (M.logo && M.logo !== M.bottom) {
+    const split = M.logo && M.logo !== M.bottom;
+    ctx.textBaseline = "bottom"; ctx.fillText("TOP LINE · headings and top logo sit under it", W - M.side - 8, M.top - 3);
+    ctx.textBaseline = "top";
+    ctx.fillText(split ? "BODY LINE · body text sits on it" : "BOTTOM LINE · body text and bottom logo sit on it", W - M.side - 8, H - M.bottom + 3);
+    if (split) {
       ctx.save(); ctx.strokeStyle = `rgba(${ink},0.75)`; ctx.lineWidth = 2; ctx.setLineDash([16, 8]);
       ctx.beginPath(); ctx.moveTo(0, H - M.logo); ctx.lineTo(W, H - M.logo); ctx.stroke(); ctx.restore();
-      ctx.textBaseline = "bottom"; ctx.fillText("Logo bottom line", W - M.side - 8, H - M.logo - 6);
+      ctx.fillText("LOGO LINE · bottom logo sits on it", W - M.side - 8, H - M.logo + 3);
     }
     ctx.restore();
     ctx.save();
@@ -1375,7 +1380,7 @@ function drawOverlay(ctx, W, H) {
       if (f.id === "reel") ctx.fillRect(W - 230, H * 0.6, 230, H * 0.4 - M.bottom);
       ctx.fillStyle = `rgba(${ink},0.7)`;
       ctx.textAlign = "left";
-      ctx.fillText(f.id === "reel" ? "Covered by Instagram (caption and buttons)" : "Covered by Instagram (reply bar)", M.side + 8, H - M.bottom + 40);
+      ctx.fillText(f.id === "reel" ? "Covered by Instagram (caption and buttons)" : "Covered by Instagram (reply bar)", M.side + 8, H - M.bottom + 60);
       ctx.fillText(f.id === "reel" ? "Covered by Instagram (header)" : "Covered by Instagram (name and progress bar)", M.side + 8, 40);
       ctx.fillStyle = `rgba(${ink},0.10)`;
     }

@@ -552,7 +552,8 @@ const FORMATS = [
   { id: "grid",     name: "Feed post",     w: 1080, h: 1440, ratio: "3:4" },
   { id: "portrait", name: "Portrait 4:5",  w: 1080, h: 1350, ratio: "4:5" },
   { id: "square",   name: "Square",        w: 1080, h: 1080, ratio: "1:1" },
-  { id: "reel",     name: "Reel / Story",  w: 1080, h: 1920, ratio: "9:16" },
+  { id: "reel",     name: "Reel",          w: 1080, h: 1920, ratio: "9:16" },
+  { id: "story",    name: "Story",         w: 1080, h: 1920, ratio: "9:16" },
 ];
 const FPS = 30;
 const STORE_KEY = "understrand-post-maker-v1";
@@ -591,7 +592,11 @@ function wire(st) {
   st.cur = Math.max(0, Math.min(st.slides.length - 1, st.cur | 0));
   // Guide margins: 24px top and bottom, 22px sides on feed posts
   if (!st.margins || (st.margins.post.top === 86 && st.margins.post.bottom === 86 && st.margins.post.side === 86))
-    st.margins = { post: { top: 24, bottom: 24, side: 22 }, reel: { top: 250, bottom: 420, side: 22 } };
+    st.margins = { post: { top: 24, bottom: 24, side: 22 }, reel: { top: 240, bottom: 420, side: 22 } };
+  // Reel top margin sits on the profile-grid crop line (240px) so there's one line, not two.
+  if (st.margins.reel.top === 250) st.margins.reel.top = 240;
+  // Stories: Instagram's bar and progress line cover the top, the reply bar the bottom.
+  if (!st.margins.story) st.margins.story = { top: 250, bottom: 250, side: 22 };
   for (const sl of st.slides) {
     if (!sl.xray) sl.xray = defaultXray();
     if (!Array.isArray(sl.layers)) sl.layers = [];
@@ -660,7 +665,7 @@ function pickLayer(id, additive) {
   renderLayers(); syncControls(); dirty = true;
 }
 // Margin guides in px: one set for feed posts, one for reels (Instagram's buttons cover more of a reel).
-const marg = () => S.margins[fmt().id === "reel" ? "reel" : "post"];
+const marg = () => S.margins[fmt().id === "reel" ? "reel" : fmt().id === "story" ? "story" : "post"];
 
 /* ---------- text parsing & timing ---------- */
 function parseLine(line) {
@@ -1316,6 +1321,7 @@ function render(ctx, W, H, t, preview) {
 
 let guideLines = { v: false, h: false };
 let cleanView = false;
+const M0 = () => marg();
 function drawOverlay(ctx, W, H) {
   if (cleanView) return;   // exactly what gets exported: no guides, no selection boxes
   const ink = luminance(S.bg) > 0.45 ? "0,0,0" : "255,255,255";
@@ -1348,24 +1354,28 @@ function drawOverlay(ctx, W, H) {
     ctx.textBaseline = "top";
     if (hasLS) ctx.letterSpacing = "0px";
     const f = fmt();
-    if (f.id === "reel") {
-      // Approximate area covered by Instagram's reel UI (caption, buttons, header).
-      ctx.fillRect(0, 0, W, 220);
-      ctx.fillRect(0, H - 420, W, 420);
-      ctx.fillRect(W - 150, 220, 150, H - 640);
+    if (f.id === "reel" || f.id === "story") {
+      // Shade what Instagram's own buttons and text cover; the shading lines up with the margins.
+      const M = marg();
+      ctx.fillRect(0, 0, W, M.top);
+      ctx.fillRect(0, H - M.bottom, W, M.bottom);
+      if (f.id === "reel") ctx.fillRect(W - 140, M.top, 140, H - M.top - M.bottom);   // like, comment, share buttons
       ctx.fillStyle = `rgba(${ink},0.7)`;
-      ctx.fillText("Instagram UI covers these areas (approx.)", 24, H - 404);
+      ctx.textAlign = "left";
+      ctx.fillText(f.id === "reel" ? "Covered by Instagram (caption and buttons)" : "Covered by Instagram (reply bar)", M.side + 8, H - M.bottom + 40);
+      ctx.fillText(f.id === "reel" ? "Covered by Instagram (header)" : "Covered by Instagram (name and progress bar)", M.side + 8, 40);
+      ctx.fillStyle = `rgba(${ink},0.10)`;
     }
-    // Profile grid shows posts cropped to 3:4.
-    const gridH = W * 4 / 3, gridW = H * 3 / 4;
+    // Profile grid shows posts cropped to 3:4 (stories never appear on the grid).
+    const gridH = f.id === "story" ? H : W * 4 / 3, gridW = f.id === "story" ? W : H * 3 / 4;
     ctx.beginPath();
     if (gridH < H - 1) { const o = (H - gridH) / 2; ctx.moveTo(0, o); ctx.lineTo(W, o); ctx.moveTo(0, H - o); ctx.lineTo(W, H - o); }
     else if (gridW < W - 1) { const o = (W - gridW) / 2; ctx.moveTo(o, 0); ctx.lineTo(o, H); ctx.moveTo(W - o, 0); ctx.lineTo(W - o, H); }
     ctx.stroke();
-    if (f.id !== "grid") {
+    if (f.id !== "grid" && f.id !== "story") {
       ctx.fillStyle = `rgba(${ink},0.7)`;
       const label = "Profile grid crop";
-      if (gridH < H - 1) ctx.fillText(label, 24, (H - gridH) / 2 + 10);
+      if (gridH < H - 1) { ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText(label, M0().side + 8, H - (H - gridH) / 2 - 6); }
       else ctx.fillText(label, (W - gridW) / 2 + 12, 24);
     }
     ctx.restore();
@@ -1603,6 +1613,36 @@ document.addEventListener("keydown", (e) => {
   e.preventDefault(); setClean(!cleanView);
 });
 
+// Changing size keeps everything where it belongs: things sitting on a margin line stay on that line,
+// centred things stay centred, and anything else keeps its place between the margins.
+function reflowTo(id) {
+  const oldF = fmt(), oldM = { ...marg() }, H0 = oldF.h, W0 = oldF.w;
+  const plans = [], keepCur = S.cur;
+  const off = document.createElement("canvas"); off.width = W0; off.height = H0;
+  const octx = off.getContext("2d");
+  S.slides.forEach((sl, i) => {
+    S.cur = i;
+    try { render(octx, W0, H0, 0, true); } catch (e) {}
+    sl.layers.forEach(l => { const b = boxes[l.id]; if (b && !(l.type === "logo" && VECTORS[variantOf(l)])) plans.push([l, { ...b }]); });
+  });
+  S.cur = keepCur;
+  S.format = id;
+  const nF = fmt(), M = marg(), H1 = nF.h, near = 14;
+  const bot0 = H0 - oldM.bottom, bot1 = H1 - M.bottom;
+  for (const [l, b] of plans) {
+    const cy = (b.y0 + b.y1) / 2;
+    let dy;
+    if (Math.abs(b.y1 - bot0) <= near) dy = bot1 - b.y1;
+    else if (Math.abs(b.y0 - oldM.top) <= near) dy = M.top - b.y0;
+    else if (Math.abs(cy - H0 / 2) <= near) dy = H1 / 2 - cy;
+    else {
+      const k = (cy - oldM.top) / Math.max(1, bot0 - oldM.top);
+      dy = M.top + k * (bot1 - M.top) - cy;
+    }
+    l.y = (l.y * H0 + dy) / H1;
+  }
+  for (const k of Object.keys(boxes)) delete boxes[k];
+}
 function renderFormats() {
   const box = $("formats"); box.innerHTML = "";
   FORMATS.forEach(f => {
@@ -1610,7 +1650,7 @@ function renderFormats() {
     b.type = "button"; b.className = "fmt";
     b.setAttribute("aria-pressed", String(S.format === f.id));
     b.innerHTML = `${f.name} <small>${f.ratio} · ${f.w}×${f.h}</small>`;
-    b.onclick = () => { S.format = f.id; renderFormats(); renderStrip(); ranges.forEach(s => s()); changed(); };
+    b.onclick = () => { if (S.format === f.id) return; reflowTo(f.id); renderFormats(); renderStrip(); ranges.forEach(s => s()); changed(); };
     box.appendChild(b);
   });
 }

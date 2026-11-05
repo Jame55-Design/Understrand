@@ -592,11 +592,13 @@ function wire(st) {
   st.cur = Math.max(0, Math.min(st.slides.length - 1, st.cur | 0));
   // Guide margins: 24px top and bottom, 22px sides on feed posts
   if (!st.margins || (st.margins.post.top === 86 && st.margins.post.bottom === 86 && st.margins.post.side === 86))
-    st.margins = { post: { top: 24, bottom: 24, side: 22 }, reel: { top: 240, bottom: 420, side: 22 } };
-  // Reel top margin sits on the profile-grid crop line (240px) so there's one line, not two.
-  if (st.margins.reel.top === 250) st.margins.reel.top = 240;
-  // Stories: Instagram's bar and progress line cover the top, the reply bar the bottom.
-  if (!st.margins.story) st.margins.story = { top: 250, bottom: 250, side: 22 };
+    st.margins = { post: { top: 24, bottom: 24, side: 22 } };
+  // Reels and Stories use Meta's published safe zones for 1080x1920.
+  // Reel: 14% top (270), 35% bottom (670), 6% sides (65). Story: 14% top and bottom (250... kept at 250), 6% sides.
+  const r0 = st.margins.reel;
+  if (!r0 || (r0.bottom === 420 && (r0.top === 240 || r0.top === 250))) st.margins.reel = { top: 270, bottom: 670, side: 65 };
+  const s0 = st.margins.story;
+  if (!s0 || (s0.top === 250 && s0.bottom === 250 && s0.side === 22)) st.margins.story = { top: 250, bottom: 250, side: 65 };
   for (const sl of st.slides) {
     if (!sl.xray) sl.xray = defaultXray();
     if (!Array.isArray(sl.layers)) sl.layers = [];
@@ -1359,7 +1361,8 @@ function drawOverlay(ctx, W, H) {
       const M = marg();
       ctx.fillRect(0, 0, W, M.top);
       ctx.fillRect(0, H - M.bottom, W, M.bottom);
-      if (f.id === "reel") ctx.fillRect(W - 140, M.top, 140, H - M.top - M.bottom);   // like, comment, share buttons
+      // Like, comment, share and save buttons: rightmost ~230px over the bottom 40% (Meta's reel safe zone)
+      if (f.id === "reel") ctx.fillRect(W - 230, H * 0.6, 230, H * 0.4 - M.bottom);
       ctx.fillStyle = `rgba(${ink},0.7)`;
       ctx.textAlign = "left";
       ctx.fillText(f.id === "reel" ? "Covered by Instagram (caption and buttons)" : "Covered by Instagram (reply bar)", M.side + 8, H - M.bottom + 40);

@@ -594,11 +594,14 @@ function wire(st) {
   if (!st.margins || (st.margins.post.top === 86 && st.margins.post.bottom === 86 && st.margins.post.side === 86))
     st.margins = { post: { top: 24, bottom: 24, side: 22 } };
   // Reels and Stories use Meta's published safe zones for 1080x1920.
-  // Reel: 14% top (270), 35% bottom (670), 6% sides (65). Story: 14% top and bottom (250... kept at 250), 6% sides.
+  // Reel: 14% top (270), 35% bottom (670), 6% sides (65). Story: 250px top and bottom, 6% sides.
   const r0 = st.margins.reel;
   if (!r0 || (r0.bottom === 420 && (r0.top === 240 || r0.top === 250))) st.margins.reel = { top: 270, bottom: 670, side: 65 };
   const s0 = st.margins.story;
   if (!s0 || (s0.top === 250 && s0.bottom === 250 && s0.side === 22)) st.margins.story = { top: 250, bottom: 250, side: 65 };
+  // Reels get a second, lower line just for the logo, the same distance from the bottom as on a story.
+  // 240px: on the profile-grid crop line too, so the logo is also whole in the grid cover.
+  if (st.margins.reel.logo == null || st.margins.reel.logo === 250) st.margins.reel.logo = 240;
   for (const sl of st.slides) {
     if (!sl.xray) sl.xray = defaultXray();
     if (!Array.isArray(sl.layers)) sl.layers = [];
@@ -667,6 +670,8 @@ function pickLayer(id, additive) {
   renderLayers(); syncControls(); dirty = true;
 }
 // Margin guides in px: one set for feed posts, one for reels (Instagram's buttons cover more of a reel).
+// Where a logo sits at the bottom: the reel's own logo line, otherwise the bottom margin.
+const logoBot = () => marg().logo || marg().bottom;
 const marg = () => S.margins[fmt().id === "reel" ? "reel" : fmt().id === "story" ? "story" : "post"];
 
 /* ---------- text parsing & timing ---------- */
@@ -1346,6 +1351,11 @@ function drawOverlay(ctx, W, H) {
     ctx.textAlign = "right";
     ctx.textBaseline = "bottom"; ctx.fillText("Top margin", W - M.side - 8, M.top - 6);
     ctx.textBaseline = "top"; ctx.fillText("Bottom margin", W - M.side - 8, H - M.bottom + 6);
+    if (M.logo && M.logo !== M.bottom) {
+      ctx.save(); ctx.strokeStyle = `rgba(${ink},0.75)`; ctx.lineWidth = 2; ctx.setLineDash([16, 8]);
+      ctx.beginPath(); ctx.moveTo(0, H - M.logo); ctx.lineTo(W, H - M.logo); ctx.stroke(); ctx.restore();
+      ctx.textBaseline = "bottom"; ctx.fillText("Logo bottom line", W - M.side - 8, H - M.logo - 6);
+    }
     ctx.restore();
     ctx.save();
     ctx.fillStyle = `rgba(${ink},0.10)`;
@@ -1390,6 +1400,7 @@ function drawOverlay(ctx, W, H) {
   { const M = marg(); ctx.save(); ctx.lineWidth = 4;
     if (guideLines.top) { ctx.beginPath(); ctx.moveTo(0, M.top); ctx.lineTo(W, M.top); ctx.stroke(); }
     if (guideLines.bottom) { ctx.beginPath(); ctx.moveTo(0, H - M.bottom); ctx.lineTo(W, H - M.bottom); ctx.stroke(); }
+    if (guideLines.logo) { ctx.beginPath(); ctx.moveTo(0, H - M.logo); ctx.lineTo(W, H - M.logo); ctx.stroke(); }
     if (guideLines.left) { ctx.beginPath(); ctx.moveTo(M.side, 0); ctx.lineTo(M.side, H); ctx.stroke(); }
     if (guideLines.right) { ctx.beginPath(); ctx.moveTo(W - M.side, 0); ctx.lineTo(W - M.side, H); ctx.stroke(); }
     ctx.restore(); }
@@ -1632,10 +1643,13 @@ function reflowTo(id) {
   S.format = id;
   const nF = fmt(), M = marg(), H1 = nF.h, near = 14;
   const bot0 = H0 - oldM.bottom, bot1 = H1 - M.bottom;
+  const lbot0 = H0 - (oldM.logo || oldM.bottom), lbot1 = H1 - (M.logo || M.bottom);
   for (const [l, b] of plans) {
     const cy = (b.y0 + b.y1) / 2;
     let dy;
-    if (Math.abs(b.y1 - bot0) <= near) dy = bot1 - b.y1;
+    // Logos sitting at the bottom go to the logo line; text and pictures to the bottom margin.
+    if (l.type === "logo" && (Math.abs(b.y1 - lbot0) <= near || Math.abs(b.y1 - bot0) <= near)) dy = lbot1 - b.y1;
+    else if (Math.abs(b.y1 - bot0) <= near) dy = bot1 - b.y1;
     else if (Math.abs(b.y0 - oldM.top) <= near) dy = M.top - b.y0;
     else if (Math.abs(cy - H0 / 2) <= near) dy = H1 / 2 - cy;
     else {
@@ -2036,9 +2050,22 @@ function placeLogo(l, slot) {
   l.size = snap50(SLOT_SIZE[slot][logoKind(v)] || l.size);
   const h = l.size * logoAspect(v);
   l.x = 0.5;
-  l.y = slot === "top" ? (M.top + h / 2) / H : slot === "bottom" ? (H - M.bottom - h / 2) / H : 0.5;
+  l.y = slot === "top" ? (M.top + h / 2) / H : slot === "bottom" ? (H - logoBot() - h / 2) / H : 0.5;
   return true;
 }
+// Slides already set as reels: move bottom logos down from the bottom margin to the new logo line.
+(function lowerReelLogos() {
+  try {
+    if (S.format !== "reel" || S.margins.reel._logoMoved) return;
+    const H = 1920, M = S.margins.reel;
+    for (const sl of S.slides) for (const l of sl.layers) {
+      if (l.type !== "logo" || VECTORS[variantOf(l)]) continue;
+      const h = l.size * logoAspect(variantOf(l)), b = l.y * H + h / 2;
+      if (Math.abs(b - (H - M.bottom)) <= 14) l.y = (H - M.logo - h / 2) / H;
+    }
+    M._logoMoved = true;
+  } catch (e) {}
+})();
 function addLogo(v, opts = {}) {
   const l = { id: newId(), type: "logo", variant: v, size: 600, x: 0.5, y: 0.5, speed: 1, dir: 1, color: null };
   if (STILLS[v]) l.size = 650;
@@ -2294,6 +2321,7 @@ canvas.addEventListener("pointermove", (ev) => {
   else if (Math.abs(b0.x1 + dx - (W - M.side)) < snap) { dx = W - M.side - b0.x1; guideLines.right = true; }
   if (Math.abs(b0.y0 + dy - M.top) < snap) { dy = M.top - b0.y0; guideLines.top = true; }
   else if (Math.abs(b0.y1 + dy - (H - M.bottom)) < snap) { dy = H - M.bottom - b0.y1; guideLines.bottom = true; }
+  else if (M.logo && Math.abs(b0.y1 + dy - (H - M.logo)) < snap) { dy = H - M.logo - b0.y1; guideLines.logo = true; }
   else if (Math.abs(drag.cy + dy - H / 2) < snap) { dy = H / 2 - drag.cy; guideLines.h = true; }
   drag.ids.forEach(id => { const m = S.layers.find(x => x.id === id); if (m) { m.x = drag.orig[id][0] + dx / W; m.y = drag.orig[id][1] + dy / H; } });
   ranges.forEach(s => s());
